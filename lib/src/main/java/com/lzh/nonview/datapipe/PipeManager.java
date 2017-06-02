@@ -1,12 +1,15 @@
 package com.lzh.nonview.datapipe;
 
+import com.lzh.nonview.datapipe.annotations.Executors;
+import com.lzh.nonview.datapipe.executor.PipeExecutors;
+import com.lzh.nonview.datapipe.executor.UIExecutor;
+
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.lang.reflect.Type;
-import java.lang.reflect.TypeVariable;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executor;
 
 /**
  * 用于管理各个组件的数据通道的管理器。
@@ -23,7 +26,7 @@ public final class PipeManager {
         if (inst == null) {
             // to avoid NullPointException.returns a default proxy instance to be used
             //noinspection unchecked
-            return (T) Proxy.newProxyInstance(clz.getClassLoader(), new Class[]{clz}, DefaultInvocationHandler.get());
+            return (T) Proxy.newProxyInstance(clz.getClassLoader(), new Class[]{clz},DefaultInvocationHandler.get());
         }
         return inst;
     }
@@ -64,9 +67,24 @@ public final class PipeManager {
         public static DefaultInvocationHandler get () {
             return instance;
         }
-
         @Override
-        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        public Object invoke(Object proxy, Method method, final Object[] args) throws Throwable {
+            Executors executors = method.getAnnotation(Executors.class);
+            Executor executor = executors == null ? null : PipeExecutors.get().find(executors.value());
+            if (executor != null) {
+                executor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        triggerCallback(args);
+                    }
+                });
+            } else {
+                triggerCallback(args);
+            }
+            return getBasicReturns(method);
+        }
+
+        private void triggerCallback(final Object[] args) {
             for (int i = 0; i < (args == null ? 0 : args.length); i++) {
                 Object arg = args[i];
                 if (arg != null && arg instanceof PipeCallback) {
@@ -74,7 +92,6 @@ public final class PipeManager {
                     callback.onError(new PipeException("You've not registered for this pipe class"));
                 }
             }
-            return getBasicReturns(method);
         }
 
         Object getBasicReturns (Method method) {

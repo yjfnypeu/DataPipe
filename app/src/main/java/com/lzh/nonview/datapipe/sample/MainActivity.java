@@ -35,6 +35,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onError(Throwable t) {
+                System.out.println(Thread.currentThread());
                 System.out.println(t.getMessage());
             }
         });
